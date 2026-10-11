@@ -176,6 +176,7 @@ on:
         options:
           - SukiSU
           - BakaSU
+          - FinaSU
         default: BakaSU
       custom_version:
         description: '自定义版本名（可选）'
@@ -351,7 +352,7 @@ jobs:
           device=$(echo "$device" | jq -c --argjson dn "$dn" '.ds = $dn | .ntsync = $dn')
           echo "Droidspaces/NTSync override: $dn"
 
-          # KernelSU 变体（固定默认分支：SukiSU→builtin, BakaSU→main）
+          # KernelSU 变体（固定默认分支：SukiSU→builtin, BakaSU→main, FinaSU→master）
           ksu_variant='${{ inputs.ksu_variant }}'
           case "$ksu_variant" in
             SukiSU)
@@ -361,6 +362,10 @@ jobs:
             BakaSU)
               ksu_hash="main"
               KSU_REPO="Baka-SU/BakaSU"
+              ;;
+            FinaSU)
+              ksu_hash="master"
+              KSU_REPO="LyraVoid/FinaSU"
               ;;
             *)
               echo "::error::Unsupported KernelSU variant: $ksu_variant"
@@ -394,7 +399,7 @@ jobs:
             echo "| Setting | Value |"
             echo "|---------|-------|"
             echo "| Device | \`${{ steps.set-matrix.outputs.model_display }}\` |"
-            echo "| KernelSU | \`${{ inputs.ksu_variant }}\` @ \`${{ inputs.ksu_variant == 'SukiSU' && 'builtin' || 'main' }}\` |"
+            echo "| KernelSU | \`${{ inputs.ksu_variant }}\` @ \`${{ inputs.ksu_variant == 'SukiSU' && 'builtin' || (inputs.ksu_variant == 'FinaSU' && 'master' || 'main') }}\` |"
             echo "| Re-Kernel | ${{ inputs.use_rekernel && '✅ enabled' || '❌ disabled' }} |"
             echo "| Optimization | \`${{ inputs.optimize_level }}\` |"
             echo "| Droidspaces & NTSync | ${{ inputs.enable_droidspaces_ntsync && '✅ enabled' || '❌ disabled' }} |"
@@ -539,8 +544,11 @@ jobs:
           ksu_type: ${{ fromJSON(needs.set-matrix.outputs.matrix)[0].ksu_type }}
           ksu_branch_or_hash: ${{ fromJSON(needs.set-matrix.outputs.matrix)[0].ksu_resolved_hash }}
           use_rekernel: ${{ inputs.use_rekernel }}
-          # BakaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
+          # BakaSU/FinaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
           ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
+          # FinaSU：管理器签名证书（内核第二信任槽对齐用，空=构建时回退 Release APK 提取）
+          ksu_cert_size: ${{ needs.get-manager.outputs.managerCertSize }}
+          ksu_cert_hash: ${{ needs.get-manager.outputs.managerCertHash }}
           custom_version: ${{ inputs.custom_version }}
           optimize_level: ${{ inputs.optimize_level }}
           build_timestamp: ${{ inputs.build_timestamp }}

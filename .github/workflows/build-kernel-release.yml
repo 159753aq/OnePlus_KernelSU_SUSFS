@@ -37,6 +37,7 @@ on:
         options:
           - SukiSU
           - BakaSU
+          - FinaSU
         default: BakaSU
       use_rekernel:
         description: '启用 Re-Kernel 驱动（默认关闭）'
@@ -115,8 +116,11 @@ jobs:
             BakaSU)
               ksu_hash="main"
               ;;
+            FinaSU)
+              ksu_hash="master"
+              ;;
             *)
-              echo "::error::Unsupported KernelSU variant: $ksu_variant (supported: SukiSU, BakaSU)"
+              echo "::error::Unsupported KernelSU variant: $ksu_variant (supported: SukiSU, BakaSU, FinaSU)"
               exit 1
               ;;
           esac
@@ -211,6 +215,9 @@ jobs:
           elif [ "$ksu_type" == "BakaSU" ]; then
             KSU_REPO_OWNER="Baka-SU"
             KSU_REPO_NAME="BakaSU"
+          elif [ "$ksu_type" == "FinaSU" ]; then
+            KSU_REPO_OWNER="LyraVoid"
+            KSU_REPO_NAME="FinaSU"
           else
             echo "::error::Unsupported KernelSU variant: $ksu_type"
             exit 1
@@ -677,8 +684,11 @@ jobs:
           ksu_type: ${{ matrix.ksu_type }}
           ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}
           use_rekernel: ${{ inputs.use_rekernel }}
-          # BakaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
+          # BakaSU/FinaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
           ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
+          # FinaSU：管理器签名证书（内核第二信任槽对齐用，空=构建时回退 Release APK 提取）
+          ksu_cert_size: ${{ needs.get-manager.outputs.managerCertSize }}
+          ksu_cert_hash: ${{ needs.get-manager.outputs.managerCertHash }}
           # SUSFS 不传解析的 commit SHA：action 会用默认 gki-androidXX-Y.Y 分支
           # （分支头=最新），命中 toolchain-cache 的 susfs-<branch>.tar.gz 归档；
           # 传 SHA 会使缓存 URL 变成 susfs-<40位SHA>.tar.gz 而永远 404
@@ -709,11 +719,7 @@ jobs:
             echo "Outputs:"
             echo "  - Kernel: ${{ steps.build.outputs.kernel_version }}"
             echo "  - Kernel release: ${{ steps.build.outputs.kernel_release }}"
-            if [ "${{ matrix.ksu_type }}" = "BakaSU" ]; then
-              echo "  - KSU BakaSU: v${{ steps.build.outputs.ksu_version }}"
-            else
-              echo "  - KSU SukiSU: v${{ steps.build.outputs.ksu_version }}"
-            fi
+            echo "  - KSU ${{ matrix.ksu_type }}: v${{ steps.build.outputs.ksu_version }}"
             if [ "${{ matrix.susfs }}" = true ]; then
               echo "  - SUSFS: ${{ steps.build.outputs.susfs_version }}"
             fi
@@ -904,6 +910,7 @@ jobs:
 
           case "$ksu_type" in
             SukiSU) KSU_REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra" ;;
+            FinaSU) KSU_REPO_URL="https://github.com/LyraVoid/FinaSU" ;;
             *)      KSU_REPO_URL="https://github.com/Baka-SU/BakaSU" ;;
           esac
 
@@ -916,6 +923,10 @@ jobs:
               SukiSU)
                 KSU_REPO_URL="https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/$RK_KSU_COMMIT"
                 ksu_ref="builtin @ ${RK_KSU_COMMIT:0:8}"
+                ;;
+              FinaSU)
+                KSU_REPO_URL="https://github.com/LyraVoid/FinaSU/commit/$RK_KSU_COMMIT"
+                ksu_ref="master @ ${RK_KSU_COMMIT:0:8}"
                 ;;
               *)
                 KSU_REPO_URL="https://github.com/Baka-SU/BakaSU/commit/$RK_KSU_COMMIT"
