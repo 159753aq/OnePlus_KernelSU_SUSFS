@@ -113,6 +113,86 @@ jobs:
             EXPECTED_BRANCH="master"
           fi
 
+          # ── FinaSU：只从官方 GitHub Release 拉取管理器（不走 CI 构建产物）──────────
+          if [ "${{ inputs.ksu_variant }}" == "FinaSU" ]; then
+            REL_JSON=""
+            for ATTEMPT in 1 2 3; do
+              REL_JSON=$(curl -s --fail --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/LyraVoid/FinaSU/releases/latest") && [ -n "$REL_JSON" ] && break
+              echo "获取 FinaSU 最新 Release 失败，重试 ($ATTEMPT/3)..."
+              sleep 5
+            done
+            [ -z "$REL_JSON" ] && { echo "无法获取 FinaSU 最新 Release 信息"; exit 1; }
+
+            REL_TAG=$(printf '%s' "$REL_JSON" | jq -r '.tag_name')
+            REL_APK_URL=$(printf '%s' "$REL_JSON" | jq -r '[.assets[] | select(.name | endswith("-release.apk"))][0].browser_download_url')
+            # /releases/latest 不含 pre-release；无 APK 资产时回退检索最近 10 个 Release
+            if [ -z "$REL_APK_URL" ] || [ "$REL_APK_URL" = "null" ]; then
+              echo "Release $REL_TAG 中无 APK 资产，回退检索最近 Release 列表..."
+              REL_LIST=$(curl -s --fail --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/LyraVoid/FinaSU/releases?per_page=10")
+              REL_APK_URL=$(printf '%s' "$REL_LIST" | jq -r '[.[] | select(.draft == false) | .assets[] | select(.name | endswith("-release.apk")) | .browser_download_url][0]')
+            fi
+            if [ -z "$REL_APK_URL" ] || [ "$REL_APK_URL" = "null" ]; then
+              echo "FinaSU 最近的 Release 中均未找到管理器 APK"
+              exit 1
+            fi
+
+            echo "下载 FinaSU 发行版管理器: Release $REL_TAG"
+            rm -rf manager-artifacts
+            mkdir -p manager-artifacts
+            APK_NAME=$(basename "$REL_APK_URL")
+            if ! curl -sL --fail --retry 3 --max-time 300 -o "manager-artifacts/$APK_NAME" "$REL_APK_URL"; then
+              echo "下载 FinaSU 管理器失败: $REL_APK_URL"
+              exit 1
+            fi
+            APK_FILE="manager-artifacts/$APK_NAME"
+
+            # APK 文件名形如 FinaSU_v0.1.0-beta5_32794-release.apk，末段数字即 versionCode
+            CLEAN_NAME=$(basename "$APK_FILE" | sed -E 's/-(arm64-v8a|armeabi-v7a|armv7|riscv64|x86_64|x86|universal)-release\.apk$/.apk/')
+            ACTUAL_VERSION=$(echo "$CLEAN_NAME" | grep -oE '_[0-9]+-release\.apk$' | tail -n 1 | sed 's/^_//; s/-release\.apk$//')
+            if ! [[ "$ACTUAL_VERSION" =~ ^[0-9]+$ ]]; then
+              echo "无法从 FinaSU 管理器 APK 文件名解析版本 ($(basename "$APK_FILE"))"
+              exit 1
+            fi
+            MANAGER_VERSION="$ACTUAL_VERSION"
+
+            # 内核侧对齐到发行版 tag 的同一提交（FinaSU Kbuild 以 30000 + 提交数计算
+            # 版本，与管理器 versionCode 同源同值）
+            KSU_COMMIT=$(git -C KernelSU rev-list -n 1 "refs/tags/$REL_TAG" 2>/dev/null || true)
+            if [ -z "$KSU_COMMIT" ]; then
+              echo "::warning::无法解析 Release tag $REL_TAG 对应的提交，内核侧将对齐默认分支 HEAD"
+            else
+              PIN_COUNT=$(git -C KernelSU rev-list --count "$KSU_COMMIT")
+              PINNED_KSU_VERSION=$((30000 + PIN_COUNT))
+              echo "内核 KSU 版本将对齐 Release $REL_TAG 提交 ${KSU_COMMIT:0:8}: $PINNED_KSU_VERSION"
+              if [ "$MANAGER_VERSION" != "$PINNED_KSU_VERSION" ]; then
+                echo "::warning::管理器实测版本 $MANAGER_VERSION 与 Release 提交对应的 KSU 版本 $PINNED_KSU_VERSION 不一致"
+              fi
+            fi
+
+            # 提取管理器签名证书（DER size + sha256），供内核侧第二信任槽
+            # （EXPECTED_SIZE2/HASH2）对齐；不注入时内核信任上游 KernelSU 默认槽，
+            # root 会被官方 KernelSU 管理器抢占、FinaSU 管理器显示"未安装"
+            CERT_INFO=$(python3 "$GITHUB_WORKSPACE/scripts/finasu_compat/extract_manager_cert.py" "$APK_FILE" | head -n1)
+            if [ -z "$CERT_INFO" ]; then
+              echo "::error::未能从 FinaSU 管理器 APK 提取签名证书"
+              exit 1
+            fi
+            CERT_SIZE=$(echo "$CERT_INFO" | awk '{print $1}')
+            CERT_HASH=$(echo "$CERT_INFO" | awk '{print $2}')
+            echo "管理器签名证书: size=$CERT_SIZE sha256=$CERT_HASH"
+
+            echo "选择 FinaSU Release $REL_TAG, APK 实测版本 $MANAGER_VERSION"
+            echo "MANAGER_VERSION=$MANAGER_VERSION" >> $GITHUB_ENV
+            echo "managerVer=$MANAGER_VERSION" >> $GITHUB_OUTPUT
+            echo "ksuCommit=$KSU_COMMIT" >> $GITHUB_OUTPUT
+            echo "managerCertSize=$CERT_SIZE" >> $GITHUB_OUTPUT
+            echo "managerCertHash=$CERT_HASH" >> $GITHUB_OUTPUT
+            echo "MANAGER_FETCH_OK=true" >> $GITHUB_ENV
+            exit 0
+          fi
+
           FILENAME="build-manager.yml"
 
           get_manager_artifacts() {
