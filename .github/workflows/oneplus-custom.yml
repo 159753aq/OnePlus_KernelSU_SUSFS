@@ -39,6 +39,7 @@ on:
           - "OnePlus-Ace-RACE-5.10.209 (A15)"
           - "OnePlus-Ace-RACE-5.10.226 (A15)"
           - "OnePlus-Ace-RACE-5.10.236 (A15)"
+          - "OnePlus-Ace-Pro-5.10.226 (A15)"
           - "OnePlus-Nord3-5.10.209 (A15)"
           - "OnePlus-Nord3-5.10.226 (A15)"
           - "OnePlus-Nord4-6.1.118 (A15)"
@@ -117,6 +118,7 @@ on:
           - "OnePlus-Ace6-Ultra-6.12.58 (A16)"
           - "OnePlus-Ace6T-6.12.38 (A16)"
           - "OnePlus-N6-5.15.180 (A16)"
+          - "OnePlus-N6x-5.15.197 (A16)"
           - "OnePlus-Nord3-5.10.236 (A16)"
           - "OnePlus-Nord4-6.1.118 (A16)"
           - "OnePlus-Nord4-6.1.141 (A16)"
@@ -126,7 +128,9 @@ on:
           - "OnePlus-Nord6-6.6.89 (A16)"
           - "OnePlus-Nord-CE5-6.1.134 (A16)"
           - "OnePlus-Nord-CE5-6.1.157 (A16)"
+          - "OnePlus-Nord-CE4Lite-6.1.118 (A16)"
           - "OnePlus-Nord-CE4Lite-6.1.141 (A16)"
+          - "OnePlus-Nord-CE6-6.1.141 (A16)"
           - "OnePlus-Nord-CE6Lite-6.1.134 (A16)"
           - "OnePlus-Open-5.15.167 (A16)"
           - "OnePlus-Open-5.15.180 (A16)"
@@ -273,7 +277,9 @@ jobs:
                 OP-ACE-6-ULTRA) flat="OnePlus-Ace6-Ultra" ;;
                 OP-ACE-6T) flat="OnePlus-Ace6T" ;;
                 OP-ACE-RACE) flat="OnePlus-Ace-RACE" ;;
+                OP-ACE-PRO) flat="OnePlus-Ace-Pro" ;;
                 OP-N6) flat="OnePlus-N6" ;;
+                OP-N6X) flat="OnePlus-N6x" ;;
                 OP-NORD-3) flat="OnePlus-Nord3" ;;
                 OP-NORD-4) flat="OnePlus-Nord4" ;;
                 OP-NORD-4-CE) flat="OnePlus-Nord4-CE" ;;
@@ -281,6 +287,7 @@ jobs:
                 OP-NORD-6) flat="OnePlus-Nord6" ;;
                 OP-NORD-CE-5) flat="OnePlus-Nord-CE5" ;;
                 OP-NORD-CE4-LITE) flat="OnePlus-Nord-CE4Lite" ;;
+                OP-NORD-CE6) flat="OnePlus-Nord-CE6" ;;
                 OP-NORD-CE6-LITE) flat="OnePlus-Nord-CE6Lite" ;;
                 OP-NORD-N30-SE) flat="OnePlus-Nord-N30-SE" ;;
                 OP-OPEN) flat="OnePlus-Open" ;;

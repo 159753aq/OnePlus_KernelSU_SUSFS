@@ -449,7 +449,9 @@ jobs:
             OP-ACE-6-ULTRA) flat="OnePlus-Ace6-Ultra" ;;
             OP-ACE-6T) flat="OnePlus-Ace6T" ;;
             OP-ACE-RACE) flat="OnePlus-Ace-RACE" ;;
+            OP-ACE-PRO) flat="OnePlus-Ace-Pro" ;;
             OP-N6) flat="OnePlus-N6" ;;
+            OP-N6X) flat="OnePlus-N6x" ;;
             OP-NORD-3) flat="OnePlus-Nord3" ;;
             OP-NORD-4) flat="OnePlus-Nord4" ;;
             OP-NORD-4-CE) flat="OnePlus-Nord4-CE" ;;
@@ -457,6 +459,7 @@ jobs:
             OP-NORD-6) flat="OnePlus-Nord6" ;;
             OP-NORD-CE-5) flat="OnePlus-Nord-CE5" ;;
             OP-NORD-CE4-LITE) flat="OnePlus-Nord-CE4Lite" ;;
+            OP-NORD-CE6) flat="OnePlus-Nord-CE6" ;;
             OP-NORD-CE6-LITE) flat="OnePlus-Nord-CE6Lite" ;;
             OP-NORD-N30-SE) flat="OnePlus-Nord-N30-SE" ;;
             OP-OPEN) flat="OnePlus-Open" ;;

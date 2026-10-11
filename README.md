@@ -29,7 +29,7 @@ This repository builds **OnePlus (Oppo/Realme) device kernels** with GitHub Acti
 | Workflow | Purpose | Notes |
 |:---|:---|:---|
 | `build-kernel-release.yml` | Batch build & optional release | Select `A15+16` / `A15` / `A16` or a GKI filter |
-| `oneplus-custom.yml` | Custom single-device build | 145 device versions, custom version name & build time |
+| `oneplus-custom.yml` | Custom single-device build | 148 device versions, custom version name & build time |
 
 ## ✨ Features
 
@@ -122,7 +122,7 @@ This repository builds **OnePlus (Oppo/Realme) device kernels** with GitHub Acti
 | 工作流 | 用途 | 说明 |
 |:---|:---|:---|
 | `build-kernel-release.yml` | 批量构建 & 可选发布 | 选择 `A15+16` / `A15` / `A16` 或 GKI 过滤 |
-| `oneplus-custom.yml` | 自定义单设备构建 | 145 个设备版本、自定义版本名与构建时间 |
+| `oneplus-custom.yml` | 自定义单设备构建 | 148 个设备版本、自定义版本名与构建时间 |
 
 ## ✨ 功能特性
 

@@ -406,7 +406,9 @@ runs:
             OP-ACE-6-ULTRA) flat="OnePlus-Ace6-Ultra" ;;
             OP-ACE-6T) flat="OnePlus-Ace6T" ;;
             OP-ACE-RACE) flat="OnePlus-Ace-RACE" ;;
+            OP-ACE-PRO) flat="OnePlus-Ace-Pro" ;;
             OP-N6) flat="OnePlus-N6" ;;
+            OP-N6X) flat="OnePlus-N6x" ;;
             OP-NORD-3) flat="OnePlus-Nord3" ;;
             OP-NORD-4) flat="OnePlus-Nord4" ;;
             OP-NORD-4-CE) flat="OnePlus-Nord4-CE" ;;
@@ -414,6 +416,7 @@ runs:
             OP-NORD-6) flat="OnePlus-Nord6" ;;
             OP-NORD-CE-5) flat="OnePlus-Nord-CE5" ;;
             OP-NORD-CE4-LITE) flat="OnePlus-Nord-CE4Lite" ;;
+            OP-NORD-CE6) flat="OnePlus-Nord-CE6" ;;
             OP-NORD-CE6-LITE) flat="OnePlus-Nord-CE6Lite" ;;
             OP-NORD-N30-SE) flat="OnePlus-Nord-N30-SE" ;;
             OP-OPEN) flat="OnePlus-Open" ;;
@@ -2295,6 +2298,21 @@ runs:
           -m TLS \
           -m BT
         echo "🔧 Aligned skmsg/sockmap symbol-export configs with stock kernel (fix tls.ko/bluetooth.ko Unknown symbol)"
+
+        # ── 修复 oplus_nfc 链接失败（n6x 等新内核分支）────────────────────────────
+        # 部分新内核分支（如 mt6835 n6x）把 CONFIG_OPLUS_NFC 的 Kconfig default 改为 y，
+        # 但提供 get_project()/get_Operator_Version() 的 oplus_project 驱动
+        # （CONFIG_OPLUS_FEATURE_OPROJECT）仍为 default n，导致内置 oplus_nfc 在最终
+        # vmlinux 链接时报 undefined symbol。而 OPROJECT=y 编译的 mtk/ 变体仍使用已被
+        # GKI 移除的 get_fs/set_fs 与 file_operations API，无法在 5.15 GKI 树上编译
+        # （官方 GKI 构建中两者均为模块）。本流水线只构建 Image、不打包模块，故与
+        # 同平台 n6（OPLUS_NFC 默认 n）保持一致：当 OPLUS_NFC 被启用且 OPROJECT 未启用
+        # 时关闭 OPLUS_NFC（该驱动只提供 /proc 信息节点，不影响 NFC 本身功能）。
+        if grep -qE '^CONFIG_OPLUS_NFC=(y|m)' "$OUT/.config" && \
+           ! grep -qE '^CONFIG_OPLUS_FEATURE_OPROJECT=(y|m)' "$OUT/.config"; then
+          scripts/config --file "$OUT/.config" -d OPLUS_NFC
+          echo "🔧 Disabled CONFIG_OPLUS_NFC (oplus_project unavailable built-in in GKI tree; matches n6 sibling config)"
+        fi
 
         make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" O="$OUT" olddefconfig
         
