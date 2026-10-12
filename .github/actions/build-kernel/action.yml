@@ -1089,6 +1089,8 @@ runs:
             fi
           fi
           echo "SUSFS_COMMIT_SHA=$SUSFS_BRANCH" >> $GITHUB_ENV
+          SUSFS_COMMIT_DATE=$(git -C "$SUSFS_FOLDER" log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S %z' 2>/dev/null || echo "unknown")
+          echo "SUSFS_COMMIT_DATE=$SUSFS_COMMIT_DATE" >> $GITHUB_ENV
         fi
         echo "✅ Dependencies cloned"
         echo "::endgroup::"
@@ -1197,6 +1199,7 @@ runs:
         # SukiSU Kbuild 自动计算版本 (40000 + REPO_BRANCH 指向分支的提交数 - 2815)
         KSU_COMMIT_SHA=$(git rev-parse HEAD)
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
+        echo "KSU_COMMIT_DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S %z' 2>/dev/null || echo unknown)" >> $GITHUB_ENV
 
         # 计算 KSUVER 用于 ZIP 命名（与 Kbuild 同源：已对齐时用官方构建提交的提交数，
         # 否则回退 GitHub API main 分支提交数）
@@ -1268,6 +1271,7 @@ runs:
         # BakaSU Kbuild 以 30000 + 提交数 + 700 自动计算版本，无需 sed
         KSU_COMMIT_SHA=$(git rev-parse HEAD)
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
+        echo "KSU_COMMIT_DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S %z' 2>/dev/null || echo unknown)" >> $GITHUB_ENV
         
         COMMITS=$(/usr/bin/git rev-list --count HEAD)
         KSU_VERSION=$(expr 30000 + $COMMITS + 700)
@@ -1395,6 +1399,7 @@ runs:
         COMMITS=$(git -C KernelSU rev-list --count HEAD)
         KSU_VERSION=$(expr 30000 + $COMMITS)
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
+        echo "KSU_COMMIT_DATE=$(git -C KernelSU log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S %z' 2>/dev/null || echo unknown)" >> $GITHUB_ENV
         echo "FinaSU" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "$KSU_VERSION" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
@@ -2478,11 +2483,45 @@ runs:
         
         BUILD_START=$(date +%s)
         set -o pipefail
-        
+
+        # 每次编译尝试独立落盘 compile-attempt-N.log（失败重试，上限 2 次）
+        BUILD_LOG_DIR="$GITHUB_WORKSPACE/build-logs"
+        mkdir -p "$BUILD_LOG_DIR"
+        MAX_ATTEMPTS=2
+        BUILD_ATTEMPTS=0
+        BUILD_EXIT_CODE=1
+
+        for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
+          BUILD_ATTEMPTS=$ATTEMPT
+          echo "========== 编译尝试 $ATTEMPT/$MAX_ATTEMPTS =========="
+          if [ "${{ inputs.debug }}" == "true" ]; then
+            if make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log "$BUILD_LOG_DIR/compile-attempt-$ATTEMPT.log"; then
+              BUILD_EXIT_CODE=0
+            fi
+          else
+            if make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log "$BUILD_LOG_DIR/compile-attempt-$ATTEMPT.log"; then
+              BUILD_EXIT_CODE=0
+            fi
+          fi
+          [ "$BUILD_EXIT_CODE" = "0" ] && break
+          echo "❌ Attempt $ATTEMPT failed"
+          [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && echo "Retrying..."
+        done
+
+        echo "BUILD_ATTEMPTS=$BUILD_ATTEMPTS" >> "$GITHUB_ENV"
+        echo "BUILD_EXIT_CODE=$BUILD_EXIT_CODE" >> "$GITHUB_ENV"
+
+        if [ "$BUILD_EXIT_CODE" != "0" ]; then
+          echo "::error::Kernel build failed after $BUILD_ATTEMPTS attempt(s)"
+          echo "::group::Last 100 lines of build log"
+          tail -n 100 "$BUILD_LOG_DIR/compile-attempt-$BUILD_ATTEMPTS.log" || true
+          echo "::endgroup::"
+          exit 1
+        fi
+
         if [ "${{ inputs.debug }}" == "true" ]; then
-          make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log
           make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$COMMON_KERNEL_FOLDER/out" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" INSTALL_MOD_PATH="$COMMON_KERNEL_FOLDER/out/install" modules_install 2>&1 | tee install.log
-          
+
           cp build.log "$DEBUG_ARTIFACTS_FOLDER/build.log"
           cp install.log "$DEBUG_ARTIFACTS_FOLDER/install.log"
           rsync -av --no-links --exclude='build' "$COMMON_KERNEL_FOLDER/out/install/lib/modules"/*/ "$DEBUG_ARTIFACTS_FOLDER"
@@ -2491,10 +2530,8 @@ runs:
           cp "$COMMON_KERNEL_FOLDER/out/System.map" "$DEBUG_ARTIFACTS_FOLDER/System.map"
           
           ls -la "$DEBUG_ARTIFACTS_FOLDER"
-        else
-          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
         fi
-        
+
         BUILD_END=$(date +%s)
         BUILD_TIME=$((BUILD_END - BUILD_START))
         
@@ -2508,7 +2545,7 @@ runs:
           echo "::endgroup::"
           exit 1
         fi
-        
+
         IMG_SIZE=$(stat -c%s "$IMG")
         
         echo "============================================"
@@ -2775,6 +2812,8 @@ runs:
           echo "Compiler: ${CLANG_VERSION:-unknown}"
           echo "Warnings Count: ${{ steps.collect_stats.outputs.warnings_count }}"
           echo "Build Time: ${{ steps.collect_stats.outputs.build_time }}s"
+          echo "编译尝试次数: ${BUILD_ATTEMPTS:-unknown}"
+          echo "最终退出码: ${BUILD_EXIT_CODE:-0}"
           if [ "${{ inputs.clean }}" == "false" ]; then
             echo "ccache Hit Rate: ${{ steps.ccache_stats.outputs.hit_rate }}"
             echo "ccache Direct Rate: ${{ steps.ccache_stats.outputs.direct_rate }}"
@@ -2814,27 +2853,36 @@ runs:
         compression-level: 0
         retention-days: 90
 
-    - name: Collect build failure logs
-      if: ${{ always() && steps.build_kernel_step.conclusion == 'failure' }}
+    - name: Collect build logs
+      # 无论成功失败都收集日志（成功时含 compile-attempt-N.log，失败时含报错现场），
+      # 构建被更早步骤（如补丁应用）跳过时同样收集
+      if: ${{ always() }}
       shell: bash
       run: |
         set -uo pipefail
         LOG_DIR="${{ github.workspace }}/build-logs"
         mkdir -p "$LOG_DIR"
 
+        BUILD_ATTEMPTS="${BUILD_ATTEMPTS:-0}"
+        BUILD_EXIT_CODE="${BUILD_EXIT_CODE:-}"
+
         {
-          echo "Device: ${{ env.OP_MODEL }} (${{ env.OP_OS_VERSION }})"
-          echo "Kernel: ${{ env.KERNEL_FULL_VER }}"
-          echo "KernelSU: ${{ inputs.ksu_type }}"
-          echo "Compiler: ${{ env.CLANG_VERSION }}"
-          echo "Optimization: ${{ inputs.optimize_level }}"
-          echo "Clean build: ${{ inputs.clean }}"
-          echo "Git commit: ${{ github.sha }}"
-          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          echo "Generated at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "Android 版本: ${{ env.ANDROID_VER }}"
+          echo "内核版本: ${{ env.KERNEL_FULL_VER }}"
+          echo "KernelSU 变体: ${{ inputs.ksu_type }}"
+          echo "配置名称: ${{ env.OP_MODEL }}-${{ env.OP_OS_VERSION }}"
+          echo "Git 提交: ${{ github.sha }}"
+          echo "工作流地址: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "编译尝试次数: ${BUILD_ATTEMPTS:-0}"
+          echo "最终退出码: ${BUILD_EXIT_CODE:-unknown}"
+          echo "KSU 提交日期: ${KSU_COMMIT_DATE:-unknown}"
+          echo "SUSFS 提交日期: ${SUSFS_COMMIT_DATE:-未启用}"
+          echo "编译器: ${{ env.CLANG_VERSION }}"
+          echo "优化级别: ${{ inputs.optimize_level }}"
+          echo "生成时间: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         } > "$LOG_DIR/summary.txt"
 
-        # Main build log lives in the workspace root (tee build.log)
+        # 编译尝试日志（compile-attempt-N.log，位于 build-logs/）
         for f in build.log install.log; do
           [ -f "$f" ] && cp "$f" "$LOG_DIR/" || true
         done
@@ -2847,8 +2895,8 @@ runs:
 
         ls -la "$LOG_DIR"
 
-    - name: Upload build failure logs
-      if: ${{ always() && steps.build_kernel_step.conclusion == 'failure' }}
+    - name: Upload build logs
+      if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
         name: "${{ env.MODEL_FLAT }}_${{ env.OP_OS_VERSION }}_${{ env.KERNEL_FULL_VER }}_${{ inputs.ksu_type }}-Build-Logs"
