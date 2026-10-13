@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 0 * * 0' # Every Sunday at 00:00 UTC
+    - cron: '0 3 * * *' # Daily at 03:00 UTC — keeps the moving susfs branch archives fresh
   workflow_dispatch:
   workflow_call:
 
@@ -191,12 +191,21 @@ jobs:
 
           echo "🔍 Checking if $FILENAME exists in mirror..."
 
-          STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$BASE_URL/$FILENAME")
-          PART_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$BASE_URL/${FILENAME}.partaa")
+          # SUSFS 分支归档是移动目标（GitLab 分支头持续前进），过时缓存会让构建
+          # 拿到旧补丁（例如缺 should_check_current 侧信道修复）而被 susfs_compat
+          # 门控拦截。因此 susfs 不走本地/上游缓存快速路径，每次都从源站刷新；
+          # 单个归档仅数 MB，代价可忽略。
+          if [ "${{ matrix.type_label }}" != "susfs" ]; then
+            STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$BASE_URL/$FILENAME")
+            PART_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$BASE_URL/${FILENAME}.partaa")
 
-          # Fast path: copy from upstream WildKernels cache instead of re-downloading from origin
-          UP_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$UPSTREAM_URL/$FILENAME")
-          UP_PART_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$UPSTREAM_URL/${FILENAME}.partaa")
+            # Fast path: copy from upstream WildKernels cache instead of re-downloading from origin
+            UP_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$UPSTREAM_URL/$FILENAME")
+            UP_PART_STATUS=$(curl -IsL -o /dev/null -w "%{http_code}" "$UPSTREAM_URL/${FILENAME}.partaa")
+          else
+            STATUS=0; PART_STATUS=0; UP_STATUS=0; UP_PART_STATUS=0
+            echo "🔄 SUSFS archive is a moving branch: refreshing from origin (cache fast paths skipped)..."
+          fi
 
           if [ "$STATUS" -eq 200 ] || [ "$PART_STATUS" -eq 200 ]; then
             echo "✅ ${{ matrix.type_label }} revision ${{ matrix.rev }} already cached."
